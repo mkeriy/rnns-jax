@@ -1,0 +1,25 @@
+{
+    "model": "blend",
+    "model_params": {
+        "in_ftrs": 32,
+        "hidden_ftrs": 128,
+        "out_ftrs": 32,
+        "num_layers": 2,
+        "bias": true,
+        "models_ckpts": [
+            "/Users/damimilko/quant/competition_package/experiments/2_GRU_128_16_adam_42_0.0003_1epochs/ckpt/", 
+            "/Users/damimilko/quant/competition_package/experiments/2_lstm_128_16_adam_42_0.0003_1epochs/ckpt/"
+        ]
+    },
+    "optimizer": "Adam",
+    "optimizer_params": {
+        "learning_rate": 0.0003
+    },
+    "seed": 42,
+    "batch_size": 16,
+    "epochs": 1,
+    "save_folder": "/Users/damimilko/quant/competition_package/experiments/blender_adam_42_0.0003_1epochs/",
+    "data_path": "./datasets/subtrain.parquet",
+    "evaluate": false,
+    "test_path": "./datasets/test.parquet"
+}

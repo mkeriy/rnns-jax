@@ -1,0 +1,20 @@
+{
+    "model": "Mamba",
+    "model_params": {
+        "num_layers": 1,
+        "in_ftrs": 32,
+        "hidden_ftrs": 128,
+        "kernel_size": 4
+    },
+    "optimizer": "Adam",
+    "optimizer_params": {
+        "learning_rate": 0.003
+    },
+    "seed": 42,
+    "batch_size": 256,
+    "epochs": 1,
+    "save_folder": "/Users/damimilko/quant/competition_package/experiments/1_mamba_128_16_adam_42_0.003/",
+    "data_path": "./datasets/subtrain.parquet",
+    "evaluate": false,
+    "test_path": "./datasets/test.parquet"
+}

@@ -1,0 +1,27 @@
+{
+    "model": "LSTM",
+    "model_params": {
+        "in_ftrs": 32,
+        "hidden_ftrs": 256,
+        "out_ftrs": 32,
+        "num_layers": 2,
+        "bias": true
+    },
+    "optimizer": "Adam",
+    "optimizer_params": {
+        "learning_rate": 0.0
+    },
+    "lr_scheduler": {
+        "init_value": 0.03,
+        "end_value": 3e-4,
+        "transition_steps": 13000,
+        "transition_begin": 1000
+    },
+    "seed": 42,
+    "batch_size": 128,
+    "epochs": 8,
+    "save_folder": "/Users/damimilko/quant/competition_package/experiments",
+    "data_path": "./datasets/subtrain.parquet",
+    "evaluate": true,
+    "test_path": "./datasets/test.parquet"
+}
