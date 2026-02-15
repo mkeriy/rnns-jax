@@ -58,10 +58,7 @@ class LSTM(nnx.Module):
         self.cells = nnx.List([
             LSTMCell(rngs, in_ftrs if i == 0 else hidden_ftrs, hidden_ftrs, bias)
             for i in range(num_layers)
-        ])
-        # if num_layers > 1:
-        #     self.blocks = create_block(rngs)
-        #     print(self.blocks.shape)               
+        ])            
         
         self.ff = nnx.Linear(hidden_ftrs, out_ftrs, use_bias=bias, rngs=rngs)
 

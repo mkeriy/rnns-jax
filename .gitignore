@@ -221,3 +221,7 @@ ckpt/
 solutions/*
 datasets/
 .DS_Store
+
+/models/mamba2.py
+/models/mlstm.py
+/models/transformer.py

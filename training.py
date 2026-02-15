@@ -10,8 +10,43 @@ import os
 import shutil
 from models import MODEL
 
-from util.losses import mse, euqlidian_distance, cosine_similarity, r2_score
+from util.losses import (
+    mse,
+    euqlidian_distance,
+    cosine_similarity,
+    r2_score,
+    mse_cosine,
+    rse,
+    mae,
+)
 from util.data_prep import BatchGenerator
+
+# TODO add noize while training
+# TODO Different losses
+# TODO
+
+OPTIMIZERS = {
+    "adam": optax.adam,
+    "adamw": optax.adamw,
+    "sgd": optax.sgd,
+    "rmsprop": optax.rmsprop,
+    "adagrad": optax.adagrad,
+    "nadamw": optax.nadamw,
+}
+
+LOSSES = {
+    "mse": mse,
+    "mae": mae,
+    "cosine": cosine_similarity,
+    "euqlid": euqlidian_distance,
+    "mse_cosine": mse_cosine,
+    "rse": rse,
+}
+
+SCHEDULER = {
+    "linear": optax.linear_schedule,
+    "exponential": optax.exponential_decay,
+}
 
 
 def create_folder(path):
@@ -37,23 +72,46 @@ def arg_parser():
 
     conf = OmegaConf.load(args.config)
 
-    experiment_name = "_".join(
-        [
-            conf.model,
-            str(conf.model_params["num_layers"]),
-            str(conf.model_params["hidden_ftrs"]),
-            conf.optimizer,
-            str(conf.optimizer_params["learning_rate"]),
-            str(conf.lr_scheduler["init_value"]) + "-" + str(conf.lr_scheduler["end_value"]),
-            str(conf.batch_size),
-            str(conf.epochs),
-        ]
-    )
+    if conf.model == "blend":
+        experiment_name = "_".join(
+            [
+                conf.experiment_name,
+                conf.model,
+                str(len(conf.models)),
+                conf.loss,
+                conf.optimizer,
+                str(conf.lr_scheduler["init_value"])
+                + "-"
+                + str(conf.lr_scheduler["end_value"]),
+                str(conf.batch_size),
+                str(conf.epochs),
+            ]
+        )
+    else:
+        experiment_name = "_".join(
+            [
+                conf.experiment_name,
+                conf.model,
+                str(conf.model_params["num_layers"]),
+                str(conf.model_params["hidden_ftrs"]),
+                conf.loss,
+                conf.optimizer,
+                str(conf.optimizer_params["learning_rate"]),
+                str(conf.lr_scheduler["init_value"])
+                + "-"
+                + str(conf.lr_scheduler["end_value"]),
+                str(conf.batch_size),
+                str(conf.epochs),
+            ]
+        )
 
     conf.save_ckpts_path = conf.save_folder + "/" + experiment_name
     save_metrics_path = conf.save_folder + "/logs/" + experiment_name
     conf.train_log_dir = save_metrics_path + "/train"
     conf.test_log_dir = save_metrics_path + "/test"
+    os.mkdir(conf.save_ckpts_path)
+    OmegaConf.save(config=conf, f=f"{conf.save_ckpts_path}/config.yaml")
+    conf.save_ckpts_path += "/ckpts"
     return conf
 
 
@@ -78,6 +136,7 @@ def calc_metrics(
 
 def loss_fn(model: nnx.Module, X: jax.Array, Y: jax.Array):
     preds, _ = model(X)
+
     loss = mse(preds, Y)
     return loss, preds
 
@@ -106,12 +165,27 @@ def eval_step(model: nnx.Module, metrics: nnx.MultiMetric, X, Y):
 def train(config):
 
     rngs = jax.random.PRNGKey(config.seed)
-
-    model = MODEL[config.model](rngs=nnx.Rngs(config.seed), **config.model_params)
-    lr_scheduler = optax.linear_schedule(**config.lr_scheduler)
-    # config.optimizer_params["learning_rate"] = lr_scheduler
+    if config.model == "blend":
+        models = []
+        for model_config in config.models:
+            m = MODEL[model_config["model"]](
+                rngs=nnx.Rngs(config.seed), **model_config["model_params"]
+            )
+            with ocp.StandardCheckpointer() as ckptr:
+                m = load_ckpt(m, ckptr, model_config["ckpt"])
+            models.append(m)
+        model = MODEL[config.model](
+            rngs=nnx.Rngs(config.seed), models=models, **config.model_params
+        )
+    else:
+        model = MODEL[config.model](rngs=nnx.Rngs(config.seed), **config.model_params)
+    
+    lr_scheduler = SCHEDULER[config.scheduler](**config.lr_scheduler)
+    
+    optimizer_params = dict(config.optimizer_params)
+    optimizer_params["learning_rate"] = lr_scheduler
     optimizer = nnx.Optimizer(
-        model, optax.adam(learning_rate=lr_scheduler), wrt=nnx.Param
+        model, OPTIMIZERS[config.optimizer](learning_rate=lr_scheduler), wrt=nnx.Param
     )
 
     train_metrics = nnx.MultiMetric(
@@ -138,10 +212,8 @@ def train(config):
     for epoch in range(config.epochs):
         rngs_data = jax.random.PRNGKey(config.seed + epoch)
         generator = BatchGenerator(rngs_data, train_df, config.batch_size)
-
         for X, Y in generator:
             model.train()
-
             train_step(model, optimizer, train_metrics, X, Y)
             with train_summary_writer.as_default():
                 for (
@@ -149,7 +221,7 @@ def train(config):
                     value,
                 ) in train_metrics.compute().items():
                     tf.summary.scalar(metric, value, step=step)
-    
+
             if config.evaluate and step % 2000 == 0:
                 model.eval()
                 for X_test, Y_test in test_generator:

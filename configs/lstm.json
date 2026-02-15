@@ -1,4 +1,5 @@
 {
+    "experiment_name": "seed2134", 
     "model": "LSTM",
     "model_params": {
         "in_ftrs": 32,
@@ -7,21 +8,23 @@
         "num_layers": 2,
         "bias": true
     },
-    "optimizer": "Adam",
+    "optimizer": "adam",
     "optimizer_params": {
         "learning_rate": 0.0
     },
+    "scheduler": "linear",
     "lr_scheduler": {
-        "init_value": 0.03,
-        "end_value": 3e-4,
-        "transition_steps": 13000,
-        "transition_begin": 1000
+        "init_value": 0.0003,
+        "end_value": 3e-5,
+        "transition_steps": 1000,
+        "transition_begin": 10000
     },
-    "seed": 42,
+    "loss": "mse",
+    "seed": 2134,
     "batch_size": 128,
     "epochs": 8,
-    "save_folder": "/Users/damimilko/quant/competition_package/experiments",
-    "data_path": "./datasets/subtrain.parquet",
+    "save_folder": <folder>,
+    "data_path": "./datasets/subtrain_2.parquet",
     "evaluate": true,
-    "test_path": "./datasets/test.parquet"
+    "test_path": "./datasets/test_2.parquet"
 }

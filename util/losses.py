@@ -10,16 +10,31 @@ def mse(preds: jax.Array, targets: jax.Array) -> jax.Array:
     return jnp.mean(jnp.mean((preds - targets) ** 2, axis=-1))
 
 
+def mae(preds: jax.Array, targets: jax.Array) -> jax.Array:
+    return jnp.mean(jnp.mean(jnp.abs(preds - targets), axis=-1))
+
+
 def cosine_similarity(preds: jax.Array, targets: jax.Array) -> jax.Array:
-    return 1 - jnp.mean(jnp.sum(preds * targets, axis=-1) / (
-        jnp.linalg.norm(preds, axis=-1) * jnp.linalg.norm(targets, axis=-1)
-    ))
+    return 1 - jnp.mean(
+        jnp.sum(preds * targets, axis=-1)
+        / (jnp.linalg.norm(preds, axis=-1) * jnp.linalg.norm(targets, axis=-1))
+    )
+
+
+def mse_cosine(preds: jax.Array, targets: jax.Array) -> jax.Array:
+    return mse(preds, targets) + 0.1 * cosine_similarity(preds, targets)
+
+
+def rse(preds: jax.Array, targets: jax.Array) -> jax.Array:
+    mean_targets = jnp.mean(targets, axis=0)
+    sso = jnp.sum((targets - mean_targets) ** 2, axis=0)
+    sse = jnp.sum((targets - preds) ** 2, axis=0)
+    return jnp.mean(sse / sso)
 
 
 def r2_score(preds: jax.Array, targets: jax.Array) -> jax.Array:
     mean_targets = jnp.mean(targets, axis=0)
-    sso = jnp.sum((targets - mean_targets)**2, axis=0)
-    sse = jnp.sum((targets - preds)**2, axis=0)
+    sso = jnp.sum((targets - mean_targets) ** 2, axis=0)
+    sse = jnp.sum((targets - preds) ** 2, axis=0)
     r2 = jnp.mean(1 - sse / sso)
     return r2
-    
