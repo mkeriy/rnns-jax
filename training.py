@@ -1,7 +1,7 @@
 from flax import nnx
 import jax
 import optax
-import tensorflow as tf
+from tensorboardX import SummaryWriter
 import polars as pl
 import orbax.checkpoint as ocp
 import argparse
@@ -198,8 +198,8 @@ def train(config):
         euqlid_dist=nnx.metrics.Average("euqlid_dist"),
         r2_scr=nnx.metrics.Average("r2_scr"),
     )
-    train_summary_writer = tf.summary.create_file_writer(config.train_log_dir)
-    test_summary_writer = tf.summary.create_file_writer(config.test_log_dir)
+    train_summary_writer = SummaryWriter(config.train_log_dir)
+    test_summary_writer = SummaryWriter(config.test_log_dir)
 
     train_df = pl.read_parquet(config.data_path)
     train_df = train_df[:, 3:]
@@ -215,24 +215,19 @@ def train(config):
         for X, Y in generator:
             model.train()
             train_step(model, optimizer, train_metrics, X, Y)
-            with train_summary_writer.as_default():
-                for (
-                    metric,
-                    value,
-                ) in train_metrics.compute().items():
-                    tf.summary.scalar(metric, value, step=step)
+            for metric, value in train_metrics.compute().items():
+                train_summary_writer.add_scalar(metric, float(value), step)
 
             if config.evaluate and step % 2000 == 0:
                 model.eval()
                 for X_test, Y_test in test_generator:
                     eval_step(model, test_metrics, X_test, Y_test)
-                    with test_summary_writer.as_default():
-                        for (
-                            metric,
-                            value,
-                        ) in test_metrics.compute().items():
-                            tf.summary.scalar(metric, value, step=step)
+                    for metric, value in test_metrics.compute().items():
+                        test_summary_writer.add_scalar(metric, float(value), step)
             step += 1
+
+    train_summary_writer.close()
+    test_summary_writer.close()
 
     with ocp.StandardCheckpointer() as ckptr:
         ckpt_dir = ocp.test_utils.erase_and_create_empty(config.save_ckpts_path)

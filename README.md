@@ -1,31 +1,50 @@
-# Wunder Challenge (Market State Forecast)
+# RNNs on JAX
 
-    [Result: 48 / 696](https://wundernn.io/wunder_challenge/leaderboard)
+Recurrent and other sequence models written in [JAX](https://github.com/jax-ml/jax) and [Flax NNX](https://flax.readthedocs.io/en/latest/nnx_basics.html).
 
-## Mission
+## Models
 
-Goal is to predict the next market state vector based on the sequence of states that came before it. Think of it as a sequence modeling problem. You'll be given the market's history up to a certain point, and you need to forecast what happens next.
+| Model       | File                                           | Config                                         |
+|-------------|------------------------------------------------|------------------------------------------------|
+| GRU         | [models/gru.py](models/gru.py)                 | [configs/gru.json](configs/gru.json)           |
+| LSTM        | [models/lstm.py](models/lstm.py)               | [configs/lstm.json](configs/lstm.json)         |                                          |
+| Mamba       | [models/mamba.py](models/mamba.py)             | [configs/mamba.json](configs/mamba.json)       |                                           |
+| Blend       | [models/blend.py](models/blend.py)             | [configs/blending.json](configs/blending.json) |
 
-## How it works
+## Setup
 
-The dataset is a single table in Parquet format, containing multiple independent sequences. Here’s what you need to know.
+Requires Python 3.11+. Dependencies are declared in [pyproject.toml](pyproject.toml). Install them with any of these:
 
-### The data format
+### uv
 
-Each row in the table represents a single market state at a specific step in a sequence. The table has **N + 3** columns:
+```bash
+uv sync
+```
 
-*   `seq_ix`: An ID for the sequence. When this number changes, you're starting a new, completely independent sequence.
-*   `step_in_seq`: The step number within a sequence (from 0 to 999).
-*   `need_prediction`: A boolean that’s `True` if we need a prediction from you for the *next* step, and `False` otherwise.
-*   **N feature columns**: The remaining `N` columns are the anonymized numeric features that describe the market state.
+### Poetry
+
+```bash
+poetry install --no-root
+```
+
+### pip
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install .
+```
+
+This installs the CPU build of JAX. For GPU, also install `jax[cuda12]`.
 
 ## Training
 
-1. Install requrements
-2. Prepare Dataset using eda.ipynb
-3. Configure training parametrs, examples in folder /configs
-4. Train model 
+1. Put the training and test data (Parquet) where the config's `data_path` and `test_path` point (by default `./datasets/`).
+2. Set the model, optimizer, scheduler and training parameters in a config. There are examples in [configs/](configs/).
+3. Run training:
 
-```bash 
-    python training.py --config <path to config>
+```bash
+python training.py --config configs/<name>.json
 ```
+
+Checkpoints and the resolved config are saved to `<save_folder>/<experiment_name>/`. Logs are saved to `<save_folder>/logs/`.
