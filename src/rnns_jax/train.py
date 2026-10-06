@@ -110,7 +110,7 @@ def arg_parser():
     save_metrics_path = conf.save_folder + "/logs/" + experiment_name
     conf.train_log_dir = save_metrics_path + "/train"
     conf.test_log_dir = save_metrics_path + "/test"
-    os.mkdir(conf.save_ckpts_path)
+    os.makedirs(conf.save_ckpts_path, exist_ok=True)
     OmegaConf.save(config=conf, f=f"{conf.save_ckpts_path}/config.yaml")
     conf.save_ckpts_path += "/ckpts"
     return conf
@@ -186,7 +186,7 @@ def train(config):
     optimizer_params = dict(config.optimizer_params)
     optimizer_params["learning_rate"] = lr_scheduler
     optimizer = nnx.Optimizer(
-        model, OPTIMIZERS[config.optimizer](learning_rate=lr_scheduler), wrt=nnx.Param
+        model, OPTIMIZERS[config.optimizer](**optimizer_params), wrt=nnx.Param
     )
 
     train_metrics = nnx.MultiMetric(
@@ -200,7 +200,8 @@ def train(config):
         r2_scr=nnx.metrics.Average("r2_scr"),
     )
     train_summary_writer = SummaryWriter(config.train_log_dir)
-    test_summary_writer = SummaryWriter(config.test_log_dir)
+    if config.evaluate:
+        test_summary_writer = SummaryWriter(config.test_log_dir)
 
     train_df = pl.read_parquet(config.data_path)
     train_df = train_df[:, 3:]
@@ -221,14 +222,16 @@ def train(config):
 
             if config.evaluate and step % 2000 == 0:
                 model.eval()
+                test_metrics.reset()
                 for X_test, Y_test in test_generator:
                     eval_step(model, test_metrics, X_test, Y_test)
-                    for metric, value in test_metrics.compute().items():
-                        test_summary_writer.add_scalar(metric, float(value), step)
+                for metric, value in test_metrics.compute().items():
+                    test_summary_writer.add_scalar(metric, float(value), step)
             step += 1
 
     train_summary_writer.close()
-    test_summary_writer.close()
+    if config.evaluate:
+        test_summary_writer.close()
 
     with ocp.StandardCheckpointer() as ckptr:
         ckpt_dir = ocp.test_utils.erase_and_create_empty(config.save_ckpts_path)
