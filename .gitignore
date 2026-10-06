@@ -222,6 +222,6 @@ solutions/*
 datasets/
 .DS_Store
 
-/models/mamba2.py
-/models/mlstm.py
-/models/transformer.py
+/src/rnns_jax/models/mamba2.py
+/src/rnns_jax/models/mlstm.py
+/src/rnns_jax/models/transformer.py

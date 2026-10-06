@@ -1,25 +1,26 @@
-from flax import nnx
-import jax
-import optax
-from tensorboardX import SummaryWriter
-import polars as pl
-import orbax.checkpoint as ocp
 import argparse
-from omegaconf import OmegaConf
 import os
 import shutil
-from models import MODEL
 
-from util.losses import (
-    mse,
-    euqlidian_distance,
+import jax
+import optax
+import orbax.checkpoint as ocp
+import polars as pl
+from flax import nnx
+from omegaconf import OmegaConf
+from tensorboardX import SummaryWriter
+
+from .data_prep import BatchGenerator
+from .losses import (
     cosine_similarity,
-    r2_score,
-    mse_cosine,
-    rse,
+    euqlidian_distance,
     mae,
+    mse,
+    mse_cosine,
+    r2_score,
+    rse,
 )
-from util.data_prep import BatchGenerator
+from .models import MODEL
 
 # TODO add noize while training
 # TODO Different losses
@@ -179,9 +180,9 @@ def train(config):
         )
     else:
         model = MODEL[config.model](rngs=nnx.Rngs(config.seed), **config.model_params)
-    
+
     lr_scheduler = SCHEDULER[config.scheduler](**config.lr_scheduler)
-    
+
     optimizer_params = dict(config.optimizer_params)
     optimizer_params["learning_rate"] = lr_scheduler
     optimizer = nnx.Optimizer(

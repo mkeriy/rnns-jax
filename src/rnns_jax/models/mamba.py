@@ -1,13 +1,12 @@
 import jax
 import jax.numpy as jnp
+from einops import einsum, repeat
 from flax import nnx
-from flax.nnx.nn import initializers
-from einops import rearrange, repeat, einsum
-
 
 
 class DepthwiseConv1D(nnx.Module):
     """Depthwise 1D Convolution with specified features and kernel size."""
+
     def __init__(self, features: int, kernel_size: int, *, rngs: nnx.Rngs):
         self.features = features
         self.kernel_size = kernel_size
@@ -17,15 +16,15 @@ class DepthwiseConv1D(nnx.Module):
         # We use a custom 'Conv_0' name for the Conv module to potentially match state dict keys
         # from the original implementation's naming conventions, but nnx uses instance attributes.
         self.Conv_0 = nnx.Conv(
-            in_features=features, # in_features is usually required by nnx.Conv
+            in_features=features,  # in_features is usually required by nnx.Conv
             out_features=features,
             kernel_size=(kernel_size,),
             feature_group_count=features,
             strides=(1,),
-            padding='SAME', # Use 'SAME' padding for convenience if input and output dims should match
-            rngs=rngs
+            padding="SAME",  # Use 'SAME' padding for convenience if input and output dims should match
+            rngs=rngs,
         )
-    
+
     @nnx.jit
     def __call__(self, x):
         # The original code's padding logic was `padding=self.kernel_size - 1` which
@@ -57,11 +56,11 @@ class SelectiveSSM(nnx.Module):
         self.ll = nnx.Linear(
             in_features=in_ftrs, out_features=3 * hidden_ftrs, rngs=rngs
         )
-    
+
     @staticmethod
     def a_log_initiazer(shape: tuple[int, int]) -> jax.Array:
-        return jnp.log(repeat(jnp.arange(1, shape[0]  + 1), 'n -> d n', d=shape[1]))
-    
+        return jnp.log(repeat(jnp.arange(1, shape[0] + 1), "n -> d n", d=shape[1]))
+
     @nnx.jit
     @staticmethod
     def run_parallel_scan(Ab, Bb_u, Cb):
@@ -76,26 +75,31 @@ class SelectiveSSM(nnx.Module):
 
         # Perform associative scan
         results = jax.lax.associative_scan(combine_parallel, (Ab, Bb_u))
-        return einsum(results[1], Cb, 'l b d_in n, l b n -> l b d_in')
+        return einsum(results[1], Cb, "l b d_in n, l b n -> l b d_in")
 
     @nnx.jit
     def __call__(self, x: jax.Array):
         delta_sBsC = self.ll(x)  # B, L, 3N
-        delta, B, C = jnp.split(delta_sBsC, indices_or_sections=3, axis=-1)  # (B, L, N), (B, L, N)
-        delta = nnx.softplus(delta)  
+        delta, B, C = jnp.split(
+            delta_sBsC, indices_or_sections=3, axis=-1
+        )  # (B, L, N), (B, L, N)
+        delta = nnx.softplus(delta)
         A = -jnp.exp(self.A_log.astype(float))
-        deltaA = jnp.exp(einsum(delta, A, 'b l d_in, d_in n -> b l d_in n'))
-        deltaB_x = einsum(delta, B, x, 'b l d_in, b l n, b l d_in  -> b l d_in n') # (B, L, D, N), (B, L, D, N)
+        deltaA = jnp.exp(einsum(delta, A, "b l d_in, d_in n -> b l d_in n"))
+        deltaB_x = einsum(
+            delta, B, x, "b l d_in, b l n, b l d_in  -> b l d_in n"
+        )  # (B, L, D, N), (B, L, D, N)
 
-        ys = SelectiveSSM.run_parallel_scan(deltaA.swapaxes(0, 1), deltaB_x.swapaxes(0, 1), C.swapaxes(0, 1))
+        ys = SelectiveSSM.run_parallel_scan(
+            deltaA.swapaxes(0, 1), deltaB_x.swapaxes(0, 1), C.swapaxes(0, 1)
+        )
         y = ys.swapaxes(0, 1)
-        
-        y = y + x * self.D 
+
+        y = y + x * self.D
 
         y = y.squeeze()
         assert y.shape == x.shape
         return y
-
 
 
 class MambaBlock(nnx.Module):
@@ -108,7 +112,9 @@ class MambaBlock(nnx.Module):
         )
         self.ssm = SelectiveSSM(rngs=rngs, in_ftrs=hidden_ftrs, hidden_ftrs=hidden_ftrs)
 
-        self.conv = DepthwiseConv1D(features=hidden_ftrs, kernel_size=kernel_size, rngs=rngs)
+        self.conv = DepthwiseConv1D(
+            features=hidden_ftrs, kernel_size=kernel_size, rngs=rngs
+        )
 
         self.down_projection = nnx.Linear(
             in_features=hidden_ftrs, out_features=in_ftrs, rngs=rngs
@@ -147,7 +153,9 @@ class Mamba(nnx.Module):
                 for i in range(num_layers)
             ]
         )
-        self.f = nnx.Linear(in_features=in_ftrs, out_features=in_ftrs, use_bias=True, rngs=rngs)
+        self.f = nnx.Linear(
+            in_features=in_ftrs, out_features=in_ftrs, use_bias=True, rngs=rngs
+        )
 
     @nnx.jit
     def __call__(self, x: jax.Array):

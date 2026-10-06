@@ -1,7 +1,8 @@
 import jax
 import jax.numpy as jnp
-from tqdm import trange
 import polars as pl
+from tqdm import trange
+
 
 class BatchGenerator:
     def __init__(self, rngs: jax.Array, data: pl.DataFrame, batch_size: int = 16):

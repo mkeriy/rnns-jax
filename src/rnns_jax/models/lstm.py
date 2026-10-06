@@ -4,7 +4,6 @@ from flax import nnx
 from flax.nnx.nn import initializers
 
 
-
 class LSTMCell(nnx.Module):
     def __init__(self, rngs: nnx.Rngs, in_ftrs: int, out_ftrs: int, bias: bool):
         self.in_features = in_ftrs
@@ -54,26 +53,26 @@ class LSTM(nnx.Module):
         self.num_layers = num_layers
         self.rngs = rngs
         self.param_dtype = jnp.float32
-        
-        self.cells = nnx.List([
-            LSTMCell(rngs, in_ftrs if i == 0 else hidden_ftrs, hidden_ftrs, bias)
-            for i in range(num_layers)
-        ])            
-        
+
+        self.cells = nnx.List(
+            [
+                LSTMCell(rngs, in_ftrs if i == 0 else hidden_ftrs, hidden_ftrs, bias)
+                for i in range(num_layers)
+            ]
+        )
+
         self.ff = nnx.Linear(hidden_ftrs, out_ftrs, use_bias=bias, rngs=rngs)
 
     def __call__(self, x: jax.Array, carry: jax.Array = None) -> jax.Array:
         scan_fn = lambda carry, cell, x: cell(x, carry)
         if carry is None:
             carry = self.cells[0].initialize_carry(x.shape[:-2])
-        
+
         for cell in self.cells:
             carry, x = nnx.scan(
                 scan_fn, in_axes=(nnx.Carry, None, 1), out_axes=(nnx.Carry, 1)
             )(carry, cell, x)
-        
 
-            
         y_last = x[:, -1, :]
 
         out = self.ff(y_last.squeeze())
