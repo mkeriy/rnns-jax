@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 import jax
 import jax.numpy as jnp
@@ -7,6 +7,7 @@ import optax
 from flax import nnx
 from tqdm.auto import tqdm
 
+from .loggers import DictLogger, make_logger
 from .losses import (
     cosine_similarity,
     euqlidian_distance,
@@ -92,6 +93,8 @@ class TrainConfig:
     epochs: int = 10
     seed: int = 0
     eval_every: int | None = None
+    logger: str | None = None
+    logger_params: dict = field(default_factory=dict)
 
 
 def _batches(X, y, batch_size: int, rng=None, drop_last: bool = False):
@@ -115,9 +118,8 @@ def _new_metrics() -> nnx.MultiMetric:
     )
 
 
-def _record(history, prefix, metrics):
-    for name, value in metrics.compute().items():
-        history.setdefault(f"{prefix}_{name}", []).append(float(value))
+def _computed(prefix: str, metrics: nnx.MultiMetric) -> dict[str, float]:
+    return {f"{prefix}/{name}": float(v) for name, v in metrics.compute().items()}
 
 
 def fit(
@@ -159,7 +161,6 @@ def fit(
     )
 
     train_metrics, val_metrics = _new_metrics(), _new_metrics()
-    history: dict[str, list[float]] = {}
 
     xb, yb = next(_batches(X, y, config.batch_size))
     model.eval()
@@ -170,35 +171,48 @@ def fit(
             f"{yb.shape}; check out_ftrs and the target columns"
         )
 
+    dict_logger = DictLogger()
+    loggers = [dict_logger]
+    extra = make_logger(config.logger, config.logger_params, asdict(config))
+    if extra is not None:
+        loggers.append(extra)
+
+    def log(metrics, step):
+        for logger in loggers:
+            logger.log(metrics, step)
+
     def validate(step):
         model.eval()
         val_metrics.reset()
         for xb, yb in _batches(X_val, y_val, config.batch_size):
             eval_step(model, val_metrics, xb, yb)
-        _record(history, "val", val_metrics)
-        history.setdefault("val_step", []).append(step)
+        log(_computed("val", val_metrics), step)
         model.train()
 
-    step = 0
-    for epoch in range(config.epochs):
-        model.train()
-        train_metrics.reset()
-        progress = tqdm(
-            _batches(X, y, config.batch_size, rng=rng, drop_last=True),
-            total=steps_per_epoch,
-            desc=f"epoch {epoch + 1}/{config.epochs}",
-        )
-        for xb, yb in progress:
-            train_step(model, optimizer, train_metrics, xb, yb)
-            step += 1
-            if step % 50 == 0:
-                progress.set_postfix(loss=float(train_metrics.compute()["loss"]))
-            if has_val and config.eval_every and step % config.eval_every == 0:
+    try:
+        step = 0
+        for epoch in range(config.epochs):
+            model.train()
+            train_metrics.reset()
+            progress = tqdm(
+                _batches(X, y, config.batch_size, rng=rng, drop_last=True),
+                total=steps_per_epoch,
+                desc=f"epoch {epoch + 1}/{config.epochs}",
+            )
+            for xb, yb in progress:
+                train_step(model, optimizer, train_metrics, xb, yb)
+                step += 1
+                if step % 50 == 0:
+                    progress.set_postfix(loss=float(train_metrics.compute()["loss"]))
+                if has_val and config.eval_every and step % config.eval_every == 0:
+                    validate(step)
+
+            log(_computed("train", train_metrics), step)
+            if has_val and not config.eval_every:
                 validate(step)
-
-        _record(history, "train", train_metrics)
-        if has_val and not config.eval_every:
-            validate(step)
+    finally:
+        for logger in loggers:
+            logger.close()
 
     model.eval()
-    return model, history
+    return model, dict_logger.history
