@@ -10,7 +10,6 @@ dependencies = [
     "jax>=0.10.2",
     "optax>=0.2.8",
     "orbax-checkpoint>=0.12.6",
-    "tensorboardx>=2.6.5",
     "tqdm>=4.70.1",
 ]
 
