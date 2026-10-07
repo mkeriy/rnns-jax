@@ -225,3 +225,4 @@ datasets/
 /src/rnns_jax/models/mamba2.py
 /src/rnns_jax/models/mlstm.py
 /src/rnns_jax/models/transformer.py
+examples/checkpoints/
