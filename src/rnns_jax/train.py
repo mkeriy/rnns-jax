@@ -7,6 +7,7 @@ import optax
 from flax import nnx
 from tqdm.auto import tqdm
 
+from .checkpoint import save_model
 from .loggers import DictLogger, make_logger
 from .losses import (
     cosine_similarity,
@@ -95,6 +96,10 @@ class TrainConfig:
     eval_every: int | None = None
     logger: str | None = None
     logger_params: dict = field(default_factory=dict)
+    monitor: str = "val_loss"
+    monitor_mode: str = "min"
+    min_delta: float = 0.0
+    ckpt_dir: str | None = None
 
 
 def _batches(X, y, batch_size: int, rng=None, drop_last: bool = False):
@@ -110,12 +115,19 @@ def _batches(X, y, batch_size: int, rng=None, drop_last: bool = False):
         )
 
 
+METRIC_NAMES = ("loss", "euqlid_dist", "r2_scr")
+
+
 def _new_metrics() -> nnx.MultiMetric:
-    return nnx.MultiMetric(
-        loss=nnx.metrics.Average("loss"),
-        euqlid_dist=nnx.metrics.Average("euqlid_dist"),
-        r2_scr=nnx.metrics.Average("r2_scr"),
-    )
+    return nnx.MultiMetric(**{name: nnx.metrics.Average(name) for name in METRIC_NAMES})
+
+
+def _improved(value: float, best: float | None, mode: str, min_delta: float) -> bool:
+    if best is None:
+        return True
+    if mode == "min":
+        return value < best - min_delta
+    return value > best + min_delta
 
 
 def _computed(prefix: str, metrics: nnx.MultiMetric) -> dict[str, float]:
@@ -135,6 +147,10 @@ def fit(
     X: (N, window, F_in) array, y: (N, F_out). The model must return
     (preds, _) with preds shaped like a batch of y. Validation runs at the end
     of each epoch, or every `config.eval_every` steps if set.
+
+    With validation data, the weights with the best `config.monitor` value are
+    returned (and saved to `config.ckpt_dir` on every improvement, if set).
+    history["best_step"] and history["best_<monitor>"] list each improvement.
     """
     config = config or TrainConfig()
     has_val = X_val is not None and y_val is not None
@@ -147,6 +163,17 @@ def fit(
     if steps_per_epoch == 0:
         raise ValueError(
             f"{len(y)} samples is fewer than batch_size={config.batch_size}"
+        )
+    if config.ckpt_dir is not None and not has_val:
+        raise ValueError("ckpt_dir needs validation data (X_val, y_val)")
+    monitor_keys = [f"val_{name}" for name in METRIC_NAMES]
+    if config.monitor not in monitor_keys:
+        raise ValueError(
+            f"monitor must be one of {monitor_keys}, got {config.monitor!r}"
+        )
+    if config.monitor_mode not in ("min", "max"):
+        raise ValueError(
+            f"monitor_mode must be 'min' or 'max', got {config.monitor_mode!r}"
         )
     rng = np.random.default_rng(config.seed)
 
@@ -181,12 +208,24 @@ def fit(
         for logger in loggers:
             logger.log(metrics, step)
 
+    best = best_state = None
+
     def validate(step):
+        nonlocal best, best_state
         model.eval()
         val_metrics.reset()
         for xb, yb in _batches(X_val, y_val, config.batch_size):
             eval_step(model, val_metrics, xb, yb)
-        log(_computed("val", val_metrics), step)
+        metrics = _computed("val", val_metrics)
+        log(metrics, step)
+
+        value = metrics[config.monitor.replace("_", "/", 1)]
+        if _improved(value, best, config.monitor_mode, config.min_delta):
+            best = value
+            best_state = jax.tree.map(jnp.copy, nnx.state(model))
+            if config.ckpt_dir is not None:
+                save_model(model, config.ckpt_dir)
+            log({f"best/{config.monitor}": best}, step)
         model.train()
 
     try:
@@ -214,5 +253,7 @@ def fit(
         for logger in loggers:
             logger.close()
 
+    if best_state is not None:
+        nnx.update(model, best_state)
     model.eval()
     return model, dict_logger.history
