@@ -2,12 +2,13 @@ import os
 from dataclasses import dataclass, field
 
 import jax
+import jax.numpy as jnp
+import numpy as np
 import optax
 from flax import nnx
 from tensorboardX import SummaryWriter
 from tqdm.auto import tqdm
 
-from .data_prep import ArrayLoader
 from .losses import (
     cosine_similarity,
     euqlidian_distance,
@@ -96,6 +97,19 @@ class TrainConfig:
     log_dir: str | None = None
 
 
+def _batches(X, y, batch_size: int, rng=None, drop_last: bool = False):
+    """Yield (X, y) float32 batches, shuffled with `rng` if given."""
+    n = len(y)
+    order = np.arange(n) if rng is None else rng.permutation(n)
+    end = n - n % batch_size if drop_last else n
+    for start in range(0, end, batch_size):
+        idx = order[start : start + batch_size]
+        yield (
+            jnp.asarray(X[idx], dtype=jnp.float32),
+            jnp.asarray(y[idx], dtype=jnp.float32),
+        )
+
+
 def _new_metrics() -> nnx.MultiMetric:
     return nnx.MultiMetric(
         loss=nnx.metrics.Average("loss"),
@@ -121,23 +135,23 @@ def fit(
 ) -> tuple[nnx.Module, dict[str, list[float]]]:
     """Train `model` on (X, y) and return the model and a history of metrics.
 
-    X: (N, window, F_in) array or WindowView, y: (N, F_out). The model must
-    return (preds, _) with preds shaped like a batch of y. Validation runs at
-    the end of each epoch, or every `config.eval_every` steps if set.
+    X: (N, window, F_in) array, y: (N, F_out). The model must return
+    (preds, _) with preds shaped like a batch of y. Validation runs at the end
+    of each epoch, or every `config.eval_every` steps if set.
     """
     config = config or TrainConfig()
     has_val = X_val is not None and y_val is not None
 
-    train_loader = ArrayLoader(
-        X, y, config.batch_size, shuffle=True, seed=config.seed, drop_last=True
-    )
-    if len(train_loader) == 0:
+    if len(X) != len(y):
+        raise ValueError(f"X has {len(X)} samples, y has {len(y)}")
+    if has_val and len(X_val) != len(y_val):
+        raise ValueError(f"X_val has {len(X_val)} samples, y_val has {len(y_val)}")
+    steps_per_epoch = len(y) // config.batch_size
+    if steps_per_epoch == 0:
         raise ValueError(
             f"{len(y)} samples is fewer than batch_size={config.batch_size}"
         )
-    val_loader = (
-        ArrayLoader(X_val, y_val, config.batch_size, shuffle=False) if has_val else None
-    )
+    rng = np.random.default_rng(config.seed)
 
     if config.scheduler is None:
         lr = config.lr
@@ -157,7 +171,7 @@ def fit(
         if has_val:
             val_writer = SummaryWriter(os.path.join(config.log_dir, "val"))
 
-    xb, yb = next(iter(ArrayLoader(X, y, config.batch_size, shuffle=False)))
+    xb, yb = next(_batches(X, y, config.batch_size))
     model.eval()
     preds, _ = model(xb)
     if preds.shape != yb.shape:
@@ -169,7 +183,7 @@ def fit(
     def validate(step):
         model.eval()
         val_metrics.reset()
-        for xb, yb in val_loader:
+        for xb, yb in _batches(X_val, y_val, config.batch_size):
             eval_step(model, val_metrics, xb, yb)
         _record(history, val_writer, "val", val_metrics, step)
         history.setdefault("val_step", []).append(step)
@@ -179,7 +193,11 @@ def fit(
     for epoch in range(config.epochs):
         model.train()
         train_metrics.reset()
-        progress = tqdm(train_loader, desc=f"epoch {epoch + 1}/{config.epochs}")
+        progress = tqdm(
+            _batches(X, y, config.batch_size, rng=rng, drop_last=True),
+            total=steps_per_epoch,
+            desc=f"epoch {epoch + 1}/{config.epochs}",
+        )
         for xb, yb in progress:
             train_step(model, optimizer, train_metrics, xb, yb)
             step += 1
