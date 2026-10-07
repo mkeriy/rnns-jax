@@ -43,8 +43,30 @@ save_model(model, "checkpoints/gru")
 ```
 
 - `TrainConfig` sets `optimizer` (`adam`, `adamw`, `sgd`, `rmsprop`, `adagrad`, `nadamw`) and `optimizer_params`, `lr` or a `scheduler` (`linear`, `exponential`) with `scheduler_params`, `batch_size`, `epochs`, `seed`, and `eval_every` (validate every N steps instead of every epoch).
-- `history` is a dict of lists: `train_loss`, `val_loss`, `train_r2_scr`, ... — plot or log it however you like.
+- `history` is a dict of lists: `train_loss`, `val_loss`, `train_r2_scr`, ..., plus `train_step` / `val_step` — plot it however you like.
 - `load_model(GRU(...same args...), "checkpoints/gru")` loads saved weights.
+
+### Logging, checkpoints and early stopping
+
+```python
+config = TrainConfig(
+    epochs=100,
+    logger="wandb",                                # or "tensorboard"; None = only the history dict
+    logger_params={"project": "my-project"},       # tensorboard: {"log_dir": "runs/gru"}
+    monitor="val_loss", monitor_mode="min",        # what "best" means, e.g. "val_r2_scr" + "max"
+    ckpt_dir="checkpoints/gru_best",               # saved on every new best validation result
+    early_stopping_patience=5,                     # stop after 5 validations without improvement
+)
+model, history = fit(model, X, y, X_val, y_val, config)  # model has the best weights
+```
+
+- Loggers need an extra: `pip install "rnns-jax[tensorboard]"`, `"rnns-jax[wandb]"` or `"rnns-jax[all]"`. W&B also gets the whole `TrainConfig` as the run config.
+- With validation data, `fit` always returns the best weights (by `monitor`), even without `ckpt_dir`. `history["best_step"][-1]` and `history["best_val_loss"][-1]` say where and how good; `history["stopped_step"]` is set if training stopped early.
+- `min_delta` sets how much better a result must be to count as an improvement. Patience counts validations: epochs by default, or `eval_every` steps.
+- To log somewhere else, subclass `rnns_jax.Logger` (`log(metrics, step)`, `close()`).
+
+### Walkthrough
+
 - [examples/quickstart.ipynb](examples/quickstart.ipynb) is a full walkthrough: data → windows → training → plots → save/load → swapping models.
 
 ## Models
