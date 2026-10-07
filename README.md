@@ -1,6 +1,6 @@
 # RNNs on JAX
 
-Recurrent and other sequence models written in [JAX](https://github.com/jax-ml/jax) and [Flax NNX](https://flax.readthedocs.io/en/latest/nnx_basics.html). Train them on your own sequence data from Python.
+Recurrent and other sequence models written in [JAX](https://github.com/jax-ml/jax) and [Flax NNX](https://flax.readthedocs.io/en/latest/nnx_basics.html). You prepare the data and write the pipeline; the library gives you the models and a `fit` function that trains on your arrays.
 
 ## Install
 
@@ -13,26 +13,38 @@ pip install git+https://github.com/mkeriy/rnns-jax.git
 
 This installs the CPU build of JAX. For GPU, also install `jax[cuda12]`.
 
-## Use as a library
+## Usage
+
+`fit` takes NumPy arrays:
+
+- `X`: `(N, window, in_ftrs)` — N input windows;
+- `y`: `(N, out_ftrs)` — one target per window;
+- `X_val`, `y_val` (optional): the same shapes, for validation.
 
 ```python
 import numpy as np
 from flax import nnx
-from rnns_jax import GRU, TrainConfig, fit, make_windows, save_model
+from numpy.lib.stride_tricks import sliding_window_view
+from rnns_jax import GRU, TrainConfig, fit, save_model
 
-series = np.random.randn(5000, 4)                  # (time steps, features)
-X, y = make_windows(series, window=50)             # X: (N, 50, 4), y: (N, 4)
-X_val, y_val = make_windows(np.random.randn(1000, 4), window=50)
+def make_windows(series, window):
+    # every `window`-step slice of `series` -> the step right after it
+    X = sliding_window_view(series[:-1], window, axis=0).transpose(0, 2, 1)
+    return X, series[window:]
+
+X, y = make_windows(np.random.randn(5000, 4).astype(np.float32), window=50)  # (4950, 50, 4), (4950, 4)
+X_val, y_val = make_windows(np.random.randn(1000, 4).astype(np.float32), window=50)
 
 model = GRU(rngs=nnx.Rngs(0), in_ftrs=4, hidden_ftrs=64, out_ftrs=4, num_layers=1)
 model, history = fit(model, X, y, X_val, y_val, TrainConfig(epochs=5, lr=1e-3))
 
-preds, _ = model(np.asarray(X_val[:32]))           # (32, 4)
+preds, _ = model(X_val[:32])                       # (32, 4)
 save_model(model, "checkpoints/gru")
 ```
 
-- For tables with many sequences (Polars or Pandas), use `windows_from_frame(df, feature_cols, id_col=..., window=...)`.
-- [docs/data.md](docs/data.md) explains how to prepare data: format, splitting, scaling, and a checklist.
+- `TrainConfig` sets `optimizer` (`adam`, `adamw`, `sgd`, `rmsprop`, `adagrad`, `nadamw`) and `optimizer_params`, `lr` or a `scheduler` (`linear`, `exponential`) with `scheduler_params`, `batch_size`, `epochs`, `seed`, and `eval_every` (validate every N steps instead of every epoch).
+- `history` is a dict of lists: `train_loss`, `val_loss`, `train_r2_scr`, ... — plot or log it however you like.
+- `load_model(GRU(...same args...), "checkpoints/gru")` loads saved weights.
 - [examples/quickstart.ipynb](examples/quickstart.ipynb) is a full walkthrough: data → windows → training → plots → save/load → swapping models.
 
 ## Models
