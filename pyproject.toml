@@ -11,11 +11,17 @@ dependencies = [
     "omegaconf>=2.3.1",
     "optax>=0.2.8",
     "orbax-checkpoint>=0.12.6",
-    "polars>=1.44.2",
-    "pyarrow>=25.0.1",
     "tensorboardx>=2.6.5",
     "tqdm>=4.70.1",
 ]
+
+[project.optional-dependencies]
+cli = [
+    "polars>=1.44.2",
+]
+
+[project.scripts]
+rnns-jax = "rnns_jax.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -29,5 +35,6 @@ dev = [
     "ipykernel>=7.4.0",
     "matplotlib>=3.11.2",
     "nbconvert>=7.17.1",
+    "polars>=1.44.2",
     "ruff>=0.16.10",
 ]

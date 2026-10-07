@@ -1,0 +1,34 @@
+# Train an LSTM on your sequence data.
+# Run: rnns-jax train --config configs/lstm.yaml
+
+experiment_name: seed2134
+model: LSTM
+model_params:
+  in_ftrs: 32
+  hidden_ftrs: 256
+  out_ftrs: 32
+  num_layers: 2
+  bias: true
+
+data:
+  train_path: ./data/train.parquet
+  val_path: ./data/val.parquet
+  id_col: seq_id
+  drop_cols: [seq_id, step]
+  window: 100
+  horizon: 1
+
+optimizer: adam
+optimizer_params: {}
+scheduler: linear
+scheduler_params:
+  init_value: 3.0e-4
+  end_value: 3.0e-5
+  transition_steps: 1000
+  transition_begin: 10000
+
+seed: 2134
+batch_size: 128
+epochs: 8
+eval_every: 2000
+save_folder: ./experiments

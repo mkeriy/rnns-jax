@@ -1,0 +1,36 @@
+# Blend already-trained models into one prediction.
+# Run: rnns-jax train --config configs/blending.yaml
+# Each entry in `models` needs the same model_params it was trained with,
+# plus the checkpoint folder that training printed ("Saved checkpoint to ...").
+
+model: blend
+model_params:
+  out_ftrs: 32
+models:
+  - model: GRU
+    model_params: {in_ftrs: 32, hidden_ftrs: 256, out_ftrs: 32, num_layers: 2, bias: true}
+    ckpt: "./experiments/<gru run name>/ckpt"
+  - model: LSTM
+    model_params: {in_ftrs: 32, hidden_ftrs: 256, out_ftrs: 32, num_layers: 2, bias: true}
+    ckpt: "./experiments/<lstm run name>/ckpt"
+
+data:
+  train_path: ./data/train.parquet
+  id_col: seq_id
+  drop_cols: [seq_id, step]
+  window: 100
+  horizon: 1
+
+optimizer: adam
+optimizer_params: {}
+scheduler: linear
+scheduler_params:
+  init_value: 3.0e-3
+  end_value: 3.0e-5
+  transition_steps: 2000
+  transition_begin: 250
+
+seed: 42
+batch_size: 16
+epochs: 2
+save_folder: ./experiments

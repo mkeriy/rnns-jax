@@ -226,3 +226,4 @@ datasets/
 /src/rnns_jax/models/mlstm.py
 /src/rnns_jax/models/transformer.py
 examples/checkpoints/
+data/

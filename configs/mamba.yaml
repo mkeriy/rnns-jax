@@ -1,0 +1,32 @@
+# Train a Mamba model on your sequence data.
+# Run: rnns-jax train --config configs/mamba.yaml
+# Mamba has no out_ftrs: it predicts in_ftrs values, so targets must have
+# the same number of columns as the features.
+
+model: Mamba
+model_params:
+  num_layers: 1
+  in_ftrs: 32
+  hidden_ftrs: 128
+  kernel_size: 4             # width of the causal convolution
+
+data:
+  train_path: ./data/train.parquet
+  id_col: seq_id
+  drop_cols: [seq_id, step]
+  window: 100
+  horizon: 1
+
+optimizer: adam
+optimizer_params: {}
+scheduler: linear
+scheduler_params:
+  init_value: 3.0e-2
+  end_value: 3.0e-4
+  transition_steps: 13000
+  transition_begin: 1000
+
+seed: 42
+batch_size: 64
+epochs: 1
+save_folder: ./experiments
