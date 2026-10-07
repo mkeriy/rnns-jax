@@ -100,6 +100,7 @@ class TrainConfig:
     monitor_mode: str = "min"
     min_delta: float = 0.0
     ckpt_dir: str | None = None
+    early_stopping_patience: int | None = None
 
 
 def _batches(X, y, batch_size: int, rng=None, drop_last: bool = False):
@@ -150,6 +151,8 @@ def fit(
 
     With validation data, the weights with the best `config.monitor` value are
     returned (and saved to `config.ckpt_dir` on every improvement, if set).
+    Training stops early after `config.early_stopping_patience` validations
+    without improvement; history["stopped_step"] then holds the step.
     history["best_step"] and history["best_<monitor>"] list each improvement.
     """
     config = config or TrainConfig()
@@ -166,6 +169,8 @@ def fit(
         )
     if config.ckpt_dir is not None and not has_val:
         raise ValueError("ckpt_dir needs validation data (X_val, y_val)")
+    if config.early_stopping_patience is not None and not has_val:
+        raise ValueError("early_stopping_patience needs validation data (X_val, y_val)")
     monitor_keys = [f"val_{name}" for name in METRIC_NAMES]
     if config.monitor not in monitor_keys:
         raise ValueError(
@@ -208,10 +213,12 @@ def fit(
         for logger in loggers:
             logger.log(metrics, step)
 
-    best = best_state = None
+    best = best_state = best_step = None
+    bad_evals = 0
 
-    def validate(step):
-        nonlocal best, best_state
+    def validate(step) -> bool:
+        """Run validation; return True if training should stop early."""
+        nonlocal best, best_state, best_step, bad_evals
         model.eval()
         val_metrics.reset()
         for xb, yb in _batches(X_val, y_val, config.batch_size):
@@ -221,15 +228,19 @@ def fit(
 
         value = metrics[config.monitor.replace("_", "/", 1)]
         if _improved(value, best, config.monitor_mode, config.min_delta):
-            best = value
+            best, best_step, bad_evals = value, step, 0
             best_state = jax.tree.map(jnp.copy, nnx.state(model))
             if config.ckpt_dir is not None:
                 save_model(model, config.ckpt_dir)
             log({f"best/{config.monitor}": best}, step)
+        else:
+            bad_evals += 1
         model.train()
+        patience = config.early_stopping_patience
+        return patience is not None and bad_evals >= patience
 
     try:
-        step = 0
+        step, stop = 0, False
         for epoch in range(config.epochs):
             model.train()
             train_metrics.reset()
@@ -243,12 +254,22 @@ def fit(
                 step += 1
                 if step % 50 == 0:
                     progress.set_postfix(loss=float(train_metrics.compute()["loss"]))
-                if has_val and config.eval_every and step % config.eval_every == 0:
-                    validate(step)
+                due = has_val and config.eval_every and step % config.eval_every == 0
+                if due and validate(step):
+                    stop = True
+                    break
+            progress.close()
 
             log(_computed("train", train_metrics), step)
-            if has_val and not config.eval_every:
-                validate(step)
+            if has_val and not config.eval_every and validate(step):
+                stop = True
+            if stop:
+                tqdm.write(
+                    f"early stopping at step {step}: best {config.monitor}="
+                    f"{best:.4g} at step {best_step}"
+                )
+                dict_logger.history["stopped_step"] = [step]
+                break
     finally:
         for logger in loggers:
             logger.close()
