@@ -27,18 +27,22 @@ from flax import nnx
 from numpy.lib.stride_tricks import sliding_window_view
 from rnns_jax import GRU, TrainConfig, fit, save_model
 
+
 def make_windows(series, window):
     # every `window`-step slice of `series` -> the step right after it
     X = sliding_window_view(series[:-1], window, axis=0).transpose(0, 2, 1)
     return X, series[window:]
 
-X, y = make_windows(np.random.randn(5000, 4).astype(np.float32), window=50)  # (4950, 50, 4), (4950, 4)
+
+X, y = make_windows(
+    np.random.randn(5000, 4).astype(np.float32), window=50
+)  # (4950, 50, 4), (4950, 4)
 X_val, y_val = make_windows(np.random.randn(1000, 4).astype(np.float32), window=50)
 
 model = GRU(rngs=nnx.Rngs(0), in_ftrs=4, hidden_ftrs=64, out_ftrs=4, num_layers=1)
 model, history = fit(model, X, y, X_val, y_val, TrainConfig(epochs=5, lr=1e-3))
 
-preds, _ = model(X_val[:32])                       # (32, 4)
+preds, _ = model(X_val[:32])  # (32, 4)
 save_model(model, "checkpoints/gru")
 ```
 
@@ -51,11 +55,12 @@ save_model(model, "checkpoints/gru")
 ```python
 config = TrainConfig(
     epochs=100,
-    logger="wandb",                                # or "tensorboard"; None = only the history dict
-    logger_params={"project": "my-project"},       # tensorboard: {"log_dir": "runs/gru"}
-    monitor="val_loss", monitor_mode="min",        # what "best" means, e.g. "val_r2_scr" + "max"
-    ckpt_dir="checkpoints/gru_best",               # saved on every new best validation result
-    early_stopping_patience=5,                     # stop after 5 validations without improvement
+    logger="wandb",  # or "tensorboard"; None = only the history dict
+    logger_params={"project": "my-project"},  # tensorboard: {"log_dir": "runs/gru"}
+    monitor="val_loss",
+    monitor_mode="min",  # what "best" means, e.g. "val_r2_scr" + "max"
+    ckpt_dir="checkpoints/gru_best",  # saved on every new best validation result
+    early_stopping_patience=5,  # stop after 5 validations without improvement
 )
 model, history = fit(model, X, y, X_val, y_val, config)  # model has the best weights
 ```

@@ -19,9 +19,6 @@ from .losses import (
     rse,
 )
 
-# TODO add noize while training
-# TODO Different losses
-# TODO
 
 OPTIMIZERS = {
     "adam": optax.adam,
