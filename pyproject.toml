@@ -10,13 +10,7 @@ dependencies = [
     "jax>=0.10.2",
     "optax>=0.2.8",
     "orbax-checkpoint>=0.12.6",
-    "tqdm>=4.70.1",
 ]
-
-[project.optional-dependencies]
-tensorboard = ["tensorboardx>=2.6.5"]
-wandb = ["wandb>=0.30.0"]
-all = ["rnns-jax[tensorboard,wandb]"]
 
 [build-system]
 requires = ["hatchling"]
@@ -31,6 +25,4 @@ dev = [
     "matplotlib>=3.11.2",
     "nbconvert>=7.17.1",
     "ruff>=0.16.10",
-    "tensorboardx>=2.6.5",
-    "wandb>=0.30.0",
 ]
