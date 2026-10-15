@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-import numpy as np
-import jax.numpy as jnp
+from collections.abc import Callable
+
 import jax
+import jax.numpy as jnp
+import numpy as np
 
 
 class Dataset(ABC):
+    """Map-style dataset: implement `__getitem__` (one sample) and `__len__`.
+
+    Samples can be any pytree of arrays, usually an (x, y) tuple.
+    """
+
     # Return host (numpy) arrays: the loader stacks them on the host and moves
     # the whole batch to device once.
     @abstractmethod
@@ -25,6 +32,17 @@ class Dataset(ABC):
 
 
 class DataLoader:
+    """Iterate over `dataset` in batches of device arrays.
+
+    A new shuffled order is drawn every epoch (every `iter(loader)`), reproducible
+    from `seed`. `drop_last=True` drops the last incomplete batch so every batch
+    has the same shape and a jitted step compiles once.
+
+    `collate_fn(samples)` replaces the default stacking of per-sample results.
+    It can't be combined with a dataset that defines `__getitems__`, which
+    returns finished batches.
+    """
+
     def __init__(
         self,
         dataset: Dataset,
@@ -32,8 +50,16 @@ class DataLoader:
         shuffle: bool = False,
         drop_last: bool = False,
         seed: int = 0,
-        collate_fn: callable | None = None,
+        collate_fn: Callable | None = None,
     ):
+        if not isinstance(batch_size, int) or batch_size < 1:
+            raise ValueError(f"batch_size must be a positive int, got {batch_size!r}")
+        if collate_fn is not None and hasattr(dataset, "__getitems__"):
+            raise ValueError(
+                f"{type(dataset).__name__} defines __getitems__, which returns whole "
+                "batches, so collate_fn would never run; transform the batch in "
+                "__getitems__ instead"
+            )
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -54,7 +80,7 @@ class DataLoader:
         n = len(self.dataset)
         if self.drop_last:
             return n // self.batch_size
-        return -(-n // self.batch_size)  # ceil division
+        return -(-n // self.batch_size)  # ceil division  # noqa: PLE0303
 
 
 class DataLoaderIterator:
@@ -91,7 +117,7 @@ class DataLoaderIterator:
         if self.bulk_support:
             # already batched: only move each field to device
             batch = self._dataset.__getitems__(idxs)
-            return tuple(jnp.asarray(field) for field in batch)
+            return jax.tree.map(jnp.asarray, batch)
 
         samples = [self._dataset[idx] for idx in idxs]
         return self._collate(samples)

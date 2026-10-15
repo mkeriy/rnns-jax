@@ -1,4 +1,5 @@
 from .checkpoint import load_model, save_model
+from .data import DataLoader, Dataset
 from .models import (
     GRU,
     LSTM,
@@ -24,6 +25,8 @@ __all__ = [
     "MODEL",
     "RNN",
     "BlendModel",
+    "DataLoader",
+    "Dataset",
     "GRUCell",
     "LSTMCell",
     "Mamba",

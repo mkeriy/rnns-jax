@@ -4,14 +4,7 @@ import jax
 import optax
 from flax import nnx
 
-from .losses import (
-    cosine_similarity,
-    euqlidian_distance,
-    mae,
-    mse,
-    mse_cosine,
-    rse,
-)
+from .losses import mse
 
 OPTIMIZERS = {
     "adam": optax.adam,
@@ -20,15 +13,6 @@ OPTIMIZERS = {
     "rmsprop": optax.rmsprop,
     "adagrad": optax.adagrad,
     "nadamw": optax.nadamw,
-}
-
-LOSSES = {
-    "mse": mse,
-    "mae": mae,
-    "cosine": cosine_similarity,
-    "euqlid": euqlidian_distance,
-    "mse_cosine": mse_cosine,
-    "rse": rse,
 }
 
 SCHEDULER = {
