@@ -7,7 +7,12 @@ from .rnn import RNN, RNNCell
 
 class GRUCell(RNNCell):
     def __init__(
-        self, in_features: int, hidden_features: int, bias: bool = True, *, rngs: nnx.Rngs
+        self,
+        in_features: int,
+        hidden_features: int,
+        bias: bool = True,
+        *,
+        rngs: nnx.Rngs,
     ):
         self.in_features = in_features
         self.hidden_features = hidden_features

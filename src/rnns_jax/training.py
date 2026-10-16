@@ -6,20 +6,6 @@ from flax import nnx
 
 from .losses import mse
 
-OPTIMIZERS = {
-    "adam": optax.adam,
-    "adamw": optax.adamw,
-    "sgd": optax.sgd,
-    "rmsprop": optax.rmsprop,
-    "adagrad": optax.adagrad,
-    "nadamw": optax.nadamw,
-}
-
-SCHEDULER = {
-    "linear": optax.linear_schedule,
-    "exponential": optax.exponential_decay,
-}
-
 
 def loss_fn(model: nnx.Module, batch: tuple[jax.Array, jax.Array]):
     """Default loss: MSE between `model(X)` predictions and `Y`; returns (loss, preds)."""
@@ -32,7 +18,11 @@ def loss_fn(model: nnx.Module, batch: tuple[jax.Array, jax.Array]):
 
 @dataclass
 class TrainConfig:
-    """Optimizer settings; turn them into an optimizer with `make_optimizer`."""
+    """Optimizer settings; turn them into an optimizer with `make_optimizer`.
+
+    `optimizer` and `scheduler` are names of optax functions, e.g. "adamw" or
+    "cosine_decay_schedule"; their `*_params` are passed to them as keywords.
+    """
 
     optimizer: str = "adam"
     optimizer_params: dict = field(default_factory=dict)
@@ -46,10 +36,10 @@ def make_optimizer(model: nnx.Module, config: TrainConfig) -> nnx.Optimizer:
     if config.scheduler is None:
         lr = config.lr
     else:
-        lr = SCHEDULER[config.scheduler](**config.scheduler_params)
+        lr = getattr(optax, config.scheduler)(**config.scheduler_params)
     return nnx.Optimizer(
         model,
-        OPTIMIZERS[config.optimizer](learning_rate=lr, **config.optimizer_params),
+        getattr(optax, config.optimizer)(learning_rate=lr, **config.optimizer_params),
         wrt=nnx.Param,
     )
 

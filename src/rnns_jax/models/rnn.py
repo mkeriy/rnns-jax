@@ -1,13 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import Any
 
 import jax
 import jax.numpy as jnp
 from flax import nnx
 
-# A cell state is any pytree of (batch, hidden_features) arrays:
-# a single array for GRU, a (c, h) tuple for LSTM.
-State = Any
+# Every cell state shape in use, each made of (batch, hidden_features) arrays.
+# Add a variant here when a new cell keeps a differently shaped state.
+State = (
+    jax.Array  # GRU: h
+    | tuple[jax.Array, jax.Array]  # LSTM: (c, h)
+)
 
 
 class RNNCell(nnx.Module, ABC):

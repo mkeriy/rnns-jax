@@ -15,7 +15,15 @@ pip install git+https://github.com/mkeriy/rnns-jax.git
 ```python
 import numpy as np
 from flax import nnx
-from rnns_jax import GRU, DataLoader, Dataset, TrainConfig, make_eval_step, make_optimizer, make_train_step
+from rnns_jax import (
+    GRU,
+    DataLoader,
+    Dataset,
+    TrainConfig,
+    make_eval_step,
+    make_optimizer,
+    make_train_step,
+)
 
 
 class ArrayDataset(Dataset):
@@ -32,8 +40,13 @@ class ArrayDataset(Dataset):
         return len(self.y)
 
 
-X, y = np.random.randn(5000, 50, 4), np.random.randn(5000, 4)  # (N, time, features), (N, targets)
-train = DataLoader(ArrayDataset(X[:4000], y[:4000]), batch_size=64, shuffle=True, drop_last=True)
+X, y = (
+    np.random.randn(5000, 50, 4),
+    np.random.randn(5000, 4),
+)  # (N, time, features), (N, targets)
+train = DataLoader(
+    ArrayDataset(X[:4000], y[:4000]), batch_size=64, shuffle=True, drop_last=True
+)
 val = DataLoader(ArrayDataset(X[4000:], y[4000:]), batch_size=64)
 
 model = GRU(in_features=4, hidden_features=64, out_features=4, rngs=nnx.Rngs(0))
@@ -57,12 +70,26 @@ preds = predict(model, X[4000:])  # (1000, 4)
 
 [examples/quickstart.ipynb](https://github.com/mkeriy/rnns-jax/blob/main/examples/quickstart.ipynb) has the full loop: early stopping, best weights, checkpoints, metrics, a custom loss.
 
+`optimizer` and `scheduler` name optax functions, and `*_params` are passed to them as keywords. With a scheduler, `lr` is ignored:
+
+```python
+config = TrainConfig(
+    optimizer="adamw",
+    optimizer_params={"weight_decay": 1e-4},
+    scheduler="cosine_decay_schedule",
+    scheduler_params={"init_value": 1e-3, "decay_steps": 10_000},
+)
+optimizer = make_optimizer(model, config)
+```
+
+The config is plain data, so it saves as JSON or YAML: `json.dump(dataclasses.asdict(config), f)`, then `TrainConfig(**json.load(f))`.
+
 ## API
 
 | Name | What it does |
 | --- | --- |
 | `Dataset`, `DataLoader` | `__getitem__`, `__len__`, optional `__getitems__`. Reshuffles each epoch from `seed`. Any iterable of batches works instead. |
-| `TrainConfig`, `make_optimizer` | `optimizer`, `optimizer_params`, `lr` or `scheduler` + `scheduler_params` → `nnx.Optimizer`. |
+| `TrainConfig`, `make_optimizer` | `optimizer`, `optimizer_params`, `lr` or `scheduler` + `scheduler_params` → `nnx.Optimizer`. Names are any optax function, e.g. `"adamw"`, `"lion"`, `"cosine_decay_schedule"`. |
 | `make_train_step(loss_fn, metrics_fn)` | Jitted `step(model, optimizer, batch, metrics=None) -> (loss, aux)`. |
 | `make_eval_step(loss_fn, metrics_fn)` | Same without gradients: `step(model, batch, metrics=None)`. |
 | `loss_fn(model, batch) -> (loss, aux)` | Default is MSE on `batch = (X, y)`; pass your own to the step factories. |
